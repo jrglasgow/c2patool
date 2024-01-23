@@ -1,0 +1,20 @@
+{
+    "name": "jrglasgow/c2patool",
+    "description": "PHP Wrapper for the c2patool binary found at https://github.com/contentauth/c2patool",
+    "type": "library",
+    "license": "GPLv2",
+    "autoload": {
+        "psr-4": {
+            "Jrglasgow\\C2paTool\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "James R Glasgow",
+            "email": "james@jrglasgow.com"
+        }
+    ],
+    "require": {
+        "symfony/process": "^5.0|^6.0"
+    }
+}
