@@ -1,3 +1,3 @@
 <?php
 
-namespace Jrglasgow\C2paWrapper;
+namespace Jrglasgow\C2paTool;
