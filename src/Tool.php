@@ -3,6 +3,7 @@
 namespace Jrglasgow\C2paTool;
 
 use Jrglasgow\C2paTool\Exceptions\CertificateValidationException;
+use phpseclib3\Crypt\PublicKeyLoader;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use stdClass;
@@ -46,7 +47,6 @@ class Tool implements LoggerAwareInterface {
   protected string $binaryVersion;
 
   public function __construct(LoggerInterface $logger) {
-    error_log(__METHOD__);
     $this->setLogger($logger);
     $this->searchBinary();
   }
@@ -144,48 +144,68 @@ class Tool implements LoggerAwareInterface {
    *
    * @return bool
    */
-  public function validateCert($cert_path, $cert_file = new stdClass()) {
+  public function validateCert($cert_path, $key_path, $cert_file = new stdClass()) {
     $request_time = $_SERVER['REQUEST_TIME'] ?? time();
     // if any of tests fail, tthe certificate fails with an exception
 
     // here we go through the steps to validate the certificate
     $x509 = new \phpseclib3\File\X509();
     $cert_file->uri = $cert_path;
-    $cert_file->decodedCert = $x509->loadX509(file_get_contents($cert_path));
+    $cert_file->key_uri = $key_path;
+    $cert_contents = '';
+    switch ($cert_path) {
+      case 'ENVIRONMENT_VARIABLE':
+        $cert_contents = getenv('C2PA_SIGN_CERT');
+        $key_contents = getenv('C2PA_PRIVATE_KEY');
+        break;
+      default:
+        $cert_contents = file_get_contents($cert_path);
+        $key_contents = file_get_contents($key_path);
+
+    }
+    $cert_file->decodedCert = $x509->loadX509($cert_contents);
 
     // check if the certificate is currently valid
     // see https://opensource.contentauthenticity.org/docs/manifest/signing-manifests/#certificates
     if ($request_time > strtotime($cert_file->decodedCert['tbsCertificate']['validity']['notAfter']['utcTime'])) {
-      throw new CertificateValidationException(strtr('Certificate %cert_location is not valid, it expired at %expire', [
+      $message = 'Certificate %cert_location is not valid, it expired at %expire.';
+      $args = [
         '%cert_location' => $cert_file->uri,
         '%expire' => $cert_file->decodedCert['tbsCertificate']['validity']['notAfter']['utcTime'],
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
     }
     else if ($request_time < strtotime($cert_file->decodedCert['tbsCertificate']['validity']['notBefore']['utcTime'])) {
-      throw new CertificateValidationException(strtr('Certificate %cert_location is not valid, not until at %begins_valid', [
+      $message = 'Certificate %cert_location is not valid, not until at %begins_valid.';
+      $args =  [
         '%cert_location' => $cert_file->uri,
         '%begins_valid' => $cert_file->decodedCert['tbsCertificate']['validity']['notBefore']['utcTime'],
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
     // check that cert uses valid signature algorithm
 
     if (!$this->algorithmToUse($cert_file)) {
-      throw new CertificateValidationException(strtr('Certificate %cert_location\'s signature algorithm (%signature_algorithm) is not compatible with the allowed algorithms <pre>%allowed_signature_algorithms</pre>', [
+      $message = 'Certificate %cert_location\'s signature algorithm (%signature_algorithm) is not compatible with the allowed algorithms <pre>%allowed_signature_algorithms</pre>';
+      $args = [
         '%cert_location' => $cert_file->uri,
         '%signature_algorithm' => $cert_file->decodedCert['signatureAlgorithm']['algorithm'],
         '%allowed_signature_algorithms' => print_r(\Jrglasgow\C2paTool\Tool::SIGNATURE_ALGORITHMS, TRUE),
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
     // Follow the Public Key Infrastructure (PKI) X.509 V3 specification.
     $version = $cert_file->decodedCert['tbsCertificate']['version'];
     $version = str_replace('v', '', $version);
     if ($version < 3) {
-      throw new CertificateValidationException(strtr('Certificate %cert_location\'s x.509 version is %version, v3 is required.', [
+      $message = 'Certificate %cert_location\'s x.509 version is %version, v3 is required.';
+      $args = [
         '%cert_location' => $cert_file->uri,
         '%version' => $cert_file->decodedCert['tbsCertificate']['version'],
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
     // validate extensions
@@ -200,9 +220,7 @@ class Tool implements LoggerAwareInterface {
       $keyUsage = TRUE;
     }
 
-    // TODO: Assert the digitalSignature bit.
-    // haven't yet figured out how to check for this... for now I am assuming
-    // that is there is a signing algorithm that matches this should pass as well
+    // Asserts the DigitalSignature Bit
     $digitalSignatureEnabled = FALSE;
     foreach ($extensions['id-ce-keyUsage']['extnValue'] AS $usage) {
       if ($usage == 'digitalSignature') {
@@ -210,9 +228,11 @@ class Tool implements LoggerAwareInterface {
       }
     }
     if (!$digitalSignatureEnabled) {
-      throw new CertificateValidationException(strtr('Certificate %cert_location\'s x.509 is not enabled for digital Signatures.', [
+      $message = 'Certificate %cert_location\'s x.509 is not enabled for digital Signatures.';
+      $args = [
         '%cert_location' => $cert_file->uri,
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
 
@@ -253,12 +273,38 @@ class Tool implements LoggerAwareInterface {
         empty($extensions['id-ce-extKeyUsage']['extnValue']) // the EKU must be non-empty
       )
     ) {
-      throw new CertificateValidationException(strtr('Certificate %location does not meet requirements """If the Basic Constraints extension (%basicConstraints) is absent or the certificate authority (CA) Boolean is not asserted (%certificateAuthority), the EKU must be non-empty (%ekuCount item(s))""".', [
+      $message = 'Certificate %location does not meet requirements """If the Basic Constraints extension (%basicConstraints) is absent or the certificate authority (CA) Boolean is not asserted (%certificateAuthority), the EKU must be non-empty (%ekuCount item(s))""".';
+      $args = [
         '%cert_location' => $cert_file->uri,
         '%basicConstraints' => $basisConstraints ? 'EXISTS' : 'ABSENT',
         '%certificateAuthority' => $certificateAuthority ? 'TRUE' : 'FALSE',
         '%ekuCount' => count($extensions['id-ce-extKeyUsage']['extnValue']),
-      ]));
+      ];
+      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
+    }
+
+    // Validate that the key will work to sign data for the certificate
+    $privateKey = PublicKeyLoader::load($key_contents);
+    // generate unique data to sign
+    $dataToSign = $_SERVER;
+    $dataToSign[] = $request_time;
+    // serialize it so we have a string
+    $dataToSign = serialize($dataToSign);
+    // generate the signature
+    $signature = $privateKey->sign($dataToSign);
+
+    // load the public key
+    $publicKey = PublicKeyLoader::load($cert_contents);
+    // verify the signature
+    $validKey = $publicKey->verify($dataToSign, $signature);
+
+    if (!$validKey) {
+      $message = 'The certificate (%cert_location) and key (%key_location) are not compatible. The signature created by the key (private key) could not be validated by the certificate (public key).';
+      $args = [
+        '%cert_location' => $cert_file->uri,
+        '%key_location' => $cert_file->key_uri,
+      ];
+      throw new CertificateValidationException(strtr($message, $args),0,NULL, $message, $args);
     }
 
     // TODO check for "id-kp-documentSigning" - PHPSecLibs doesn't know about it yet
