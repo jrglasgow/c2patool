@@ -7,7 +7,63 @@ use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\File\X509;
 use stdClass;
 
+/**
+ * Will sign and embed a manifest.
+ */
 class Signer {
+
+  /**
+   * list of supported mime types - since there isn't a one-to-one, or a
+   * one-to-many relationship between SUPPORT_MIME_TYPES and
+   * SUPPORT_FILE_EXTENSIONS there couldn't easily be just one array.
+   */
+  const SUPPORT_MIME_TYPES = [
+    'video/msvideo',
+    'video/avi',
+    'application-msvideo',
+    'image/avif',
+    'application/x-c2pa-manifest-store',
+    'image/x-adobe-dng',
+    'image/heic',
+    'image/heif',
+    'image/jpeg',
+    'audio/mp4',
+    'audio/mpeg',
+    'video/mp4',
+    'application/mp4',
+    'video/quicktime',
+    'image/png',
+    'image/svg+xml',
+    'image/tiff',
+    'audio/x-wav',
+    'image/webp',
+  ];
+
+  /**
+   * List of support file extensions - since there isn't a one-to-one, or a
+   * one-to-many relationship between SUPPORT_MIME_TYPES and
+   * SUPPORT_FILE_EXTENSIONS there couldn't easily be just one array.
+   */
+  const SUPPORT_FILE_EXTENSIONS = [
+    'avi',
+    'avif',
+    'c2pa',
+    'dng',
+    'heic',
+    'heif',
+    'jpg',
+    'jpeg',
+    'm4a',
+    'mp3',
+    'mp4',
+    'mov',
+    'png',
+    'svg',
+    'tif',
+    'tiff',
+    'wav',
+    'webp',
+  ];
 
   /**
    * The signature types allowed - see https://opensource.contentauthenticity.org/docs/manifest/signing-manifests#signature-types
@@ -57,13 +113,6 @@ class Signer {
   protected \stdClass $certDetails;
 
   /**
-   * The
-   *
-   * @var bool
-   */
-  protected bool $signatureAlgorithm;
-
-  /**
    * @param \Jrglasgow\C2paTool\Tool $tool
    * @param string $cert_file_path
    * @param string $key_file_path
@@ -86,6 +135,109 @@ class Signer {
   }
 
   /**
+   * Sign an asset
+   *
+   * @param string $source_file
+   * @param string $destination_file
+   * @param string $manifest
+   *
+   * @return true
+   */
+  public function sign(string $source_file, string $destination_file, string $manifest): bool {
+    $command_args = [
+      $source_file,// the file we are signing
+      '--config', // the manifest is being provided on the command line
+      '\'' . (string) $this->adjustManifest($manifest) . '\'',
+    ];
+
+    if ($source_file == $destination_file) {
+      // we are overwriting the source
+      $command_args[] = '-f';
+    }
+
+    $command_args[] = '-o ';
+    $command_args[] = $destination_file;
+    $command = implode(' ', $command_args);
+    return $this->tool->executeCommand($command, 60);
+  }
+
+  /**
+   * make sure the keys, signature algorithm, and
+   *
+   * @param $manifest
+   *
+   * @return false|string
+   */
+  protected function adjustManifest($manifest) {
+    $manifest = json_decode($manifest);
+
+    // set the signature algorithm
+    $manifest->alg = $this->recommendedSignatureType();
+
+    // set the private key
+    if ($this->keyFilePath == 'ENVIRONMENT_VARIABLE'){
+      // make sure there is no key file in the manifest if we have environment variables set
+      if (isset($manifest->private_key)) {
+        unset($manifest->private_key);
+      }
+    }
+    else {
+      $manifest->private_key = $this->keyFilePath;
+    }
+
+    // set the certificate
+    if ($this->certFilePath == 'ENVIRONMENT_VARIABLE'){
+      // make sure there is no key file in the manifest if we have environment variables set
+      if (isset($manifest->sign_cert)) {
+        unset($manifest->sign_cert);
+      }
+    }
+    else {
+      $manifest->sign_cert = $this->certFilePath;
+    }
+
+    // set the claim generator
+    if (!isset($manifest->claim_generator) || empty($manifest->claim_generator)) {
+      $manifest->claim_generator = __CLASS__ . ' - https://github.com/jrglasgow/c2patool';
+    }
+
+    // set the ta_url
+    if (!isset($manifest->ta_url) || empty($manifest->ta_url)) {
+      $manifest->ta_url = 'http://timestamp.digicert.com';
+    }
+
+    return json_encode($manifest);
+  }
+
+  /**
+   * check to see is the mime type is supported
+   *
+   * @param mixed $mime_type
+   *
+   * @return bool
+   */
+  public static function mimeTypeAllowed(mixed $mime_type) {
+    if (array_search($mime_type, self::SUPPORT_MIME_TYPES)) {
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  /**
+   * Check to see if the file extension is supported
+   *
+   * @param mixed $extension
+   *
+   * @return bool
+   */
+  public static function fileExtensionAllowed(mixed $extension) {
+    if (array_search($extension, self::SUPPORT_FILE_EXTENSIONS)) {
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  /**
    * get the signature algorithm from the certificate details
    *
    * @return mixed
@@ -97,12 +249,12 @@ class Signer {
   /**
    * get the recommended signature type based on the signature algorithm of the
    * certificate - see https://opensource.contentauthenticity.org/docs/manifest/signing-manifests/#signature-types
-   *
+   *s
    * @return string
    */
   protected function recommendedSignatureType() {
     $algorithm = $this->getSignatureAlgorithm();
-    $signatureAlgorithms = Tool::SIGNATURE_ALGORITHMS;
+    $signatureAlgorithms = self::SIGNATURE_ALGORITHMS;
     return strtolower($signatureAlgorithms[$algorithm]);
   }
 
