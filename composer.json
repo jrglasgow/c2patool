@@ -2,7 +2,7 @@
     "name": "jrglasgow/c2patool",
     "description": "PHP Wrapper for the c2patool command line utility found at https://github.com/contentauth/c2patool",
     "type": "library",
-    "license": "GPLv2",
+    "license": "GPL-2.0-or-later",
     "autoload": {
         "psr-4": {
             "Jrglasgow\\C2paTool\\": "src/"
