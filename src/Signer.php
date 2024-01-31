@@ -169,10 +169,16 @@ class Signer {
    *
    * @return false|string
    */
-  protected function adjustManifest(string|array $manifest) {
+  protected function adjustManifest(string|array|stdClass $manifest): bool|string {
     if (is_string($manifest)) {
       $manifest = json_decode($manifest);
     }
+    else if (is_array($manifest)) {
+      // normalize the manifest (really it ends up being a stdClass if it was
+      // properly formatted)
+      $manifest = json_decode(json_encode($manifest));
+    }
+
 
     // set the signature algorithm
     $manifest->alg = $this->recommendedSignatureType();
@@ -201,7 +207,7 @@ class Signer {
 
     // set the claim generator
     if (!isset($manifest->claim_generator) || empty($manifest->claim_generator)) {
-      $manifest->claim_generator = __CLASS__ . ' - https://github.com/jrglasgow/c2patool';
+      $manifest->claim_generator = __CLASS__;
     }
 
     // set the ta_url
