@@ -292,9 +292,25 @@ class Signer {
         break;
       default:
         $cert_contents = file_get_contents($cert_path);
-        $key_contents = file_get_contents($key_path);
+        if (empty($key_path) || !file_exists($key_path)) {
+          $message = 'Certificate %cert_location is not valid, corresponding key file %key_path does not exist.';
+          $args = [
+            '%cert_location' => $cert_file->uri,
+            '%key_path' => $key_path,
+          ];
+          throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
+        }
 
+        $key_contents = file_get_contents($key_path);
     }
+    if (empty($cert_contents)) {
+      $message = 'Certificate %cert_location is not valid, file is empty.';
+      $args = [
+        '%cert_location' => $cert_file->uri,
+      ];
+      throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
+    }
+
     $cert_file->decodedCert = $x509->loadX509($cert_contents);
 
     // check if the certificate is currently valid
@@ -415,6 +431,18 @@ class Signer {
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
+    // TODO check for "id-kp-documentSigning" - PHPSecLibs doesn't know about it yet
+
+
+
+    if (empty($key_contents)) {
+      $message = 'Certificate %cert_location is not valid, corresponding key file %key_path is empty.';
+      $args = [
+        '%cert_location' => $cert_file->uri,
+        '%key_path' => $key_path,
+      ];
+      throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
+    }
     // Validate that the key will work to sign data for the certificate
     $privateKey = PublicKeyLoader::load($key_contents);
     // generate unique data to sign
@@ -438,9 +466,6 @@ class Signer {
       ];
       throw new CertificateValidationException(strtr($message, $args),0,NULL, $message, $args);
     }
-
-    // TODO check for "id-kp-documentSigning" - PHPSecLibs doesn't know about it yet
-
 
     return TRUE;
   }
