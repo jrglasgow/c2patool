@@ -143,7 +143,7 @@ class Signer {
    *
    * @return true
    */
-  public function sign(string $source_file, string $destination_file, string $manifest): bool {
+  public function sign(string $source_file, string $destination_file, string|array $manifest): bool {
     $command_args = [
       $source_file,// the file we are signing
       '--config', // the manifest is being provided on the command line
@@ -162,20 +162,23 @@ class Signer {
   }
 
   /**
-   * make sure the keys, signature algorithm, and
+   * Make sure the keys, signature algorithm, are set according to the
+   * configuration of the Signer. Convert the manifest to a JSON string.
    *
    * @param $manifest
    *
    * @return false|string
    */
-  protected function adjustManifest($manifest) {
-    $manifest = json_decode($manifest);
+  protected function adjustManifest(string|array $manifest) {
+    if (is_string($manifest)) {
+      $manifest = json_decode($manifest);
+    }
 
     // set the signature algorithm
     $manifest->alg = $this->recommendedSignatureType();
 
     // set the private key
-    if ($this->keyFilePath == 'ENVIRONMENT_VARIABLE'){
+    if ($this->keyFilePath == 'ENVIRONMENT_VARIABLE') {
       // make sure there is no key file in the manifest if we have environment variables set
       if (isset($manifest->private_key)) {
         unset($manifest->private_key);
