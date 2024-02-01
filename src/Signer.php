@@ -135,15 +135,16 @@ class Signer {
   }
 
   /**
-   * Sign an asset
+   * Add a manifest and sign a file
    *
-   * @param string $source_file
-   * @param string $destination_file
-   * @param string $manifest
+   * @param string $source_file The source file path
+   * @param string $destination_file The output path for the resulting signed media file
+   * @param string|array $manifest The manifest which can be turned into JSON (or one that is already JSON)
+   * @param string $parent_file The parent file that the source was derived from
    *
    * @return true
    */
-  public function sign(string $source_file, string $destination_file, string|array $manifest): bool {
+  public function sign(string $source_file, string $destination_file, string|array $manifest, string $parent_file = ''): bool {
     $command_args = [
       $source_file,// the file we are signing
       '--config', // the manifest is being provided on the command line
@@ -153,6 +154,11 @@ class Signer {
     if ($source_file == $destination_file) {
       // we are overwriting the source
       $command_args[] = '-f';
+    }
+
+    if (!empty($parent_file) && file_exists($parent_file)) {
+      $command_args[] = '--parent';
+      $command_args[] = $parent_file;
     }
 
     $command_args[] = '-o ';
