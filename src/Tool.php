@@ -18,7 +18,7 @@ class Tool implements LoggerAwareInterface {
    * The location fo the c2patool binary
    * @var string|false
    */
-  protected string|false $binary;
+  protected string|false $binary = '';
 
   /**
    * The version of the binary
