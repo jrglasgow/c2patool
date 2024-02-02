@@ -77,6 +77,10 @@ class Tool implements LoggerAwareInterface {
    * @return false|string
    */
   public function setBinary($file_path): bool|string {
+    if (empty($file_path)) {
+      // check to make sure something is being sent in
+      return FALSE;
+    }
     $old_binary = $this->binary;
     $this->binary = $file_path;
     if ($this->setBinaryVersion()) {
