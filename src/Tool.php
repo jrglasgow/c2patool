@@ -66,6 +66,7 @@ class Tool implements LoggerAwareInterface {
         }
       }
     }
+    $this->binaryVersion = FALSE;
     return FALSE;
   }
 
@@ -117,7 +118,7 @@ class Tool implements LoggerAwareInterface {
    */
   private function setBinaryVersion() {
     $timeout = 60;
-    $output = $this->executeCommand('--version');
+    $output = $this->executeCommand('--version', 30, 'NOT FOUND');
     $version = trim(str_replace('c2patool', '', $output));
     $this->binaryVersion = $version;
     return $output ?? FALSE;
@@ -127,11 +128,14 @@ class Tool implements LoggerAwareInterface {
    * Executes a command with the binary executable.
    *
    * @param $command
-   * @param $timeout
+   * @param int $timeout
+   * @param string $default the output to return if the excuted process didn't
+   *                        return any output.
    *
    * @return string
    */
-  public function executeCommand($command, $timeout = 60): string {
+  public function executeCommand($command, $timeout = 60, $default = 'COULD NOT EXECUTE'): string {
+    // test to make sure the binary exists and is executable
     $command = $this->binary . ' ' . $command;
     if (isset($this->binary) && file_exists($this->binary) && is_executable($this->binary)) {
       $process = Process::fromShellCommandline($command);
@@ -159,6 +163,8 @@ class Tool implements LoggerAwareInterface {
         ], TRUE),
       ]);
     }
+    // couldn't run the command so the default is returned
+    return $default;
   }
 
 }

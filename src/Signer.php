@@ -304,10 +304,12 @@ class Signer {
             '%cert_location' => $cert_file->uri,
             '%key_path' => $key_path,
           ];
-          throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
+          //throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
+          $key_contents = NULL;
         }
-
-        $key_contents = file_get_contents($key_path);
+        else {
+          $key_contents = file_get_contents($key_path);
+        }
     }
     if (empty($cert_contents)) {
       $message = 'Certificate %cert_location is not valid, file is empty.';
@@ -376,11 +378,14 @@ class Signer {
 
     // Asserts the DigitalSignature Bit
     $digitalSignatureEnabled = FALSE;
-    foreach ($extensions['id-ce-keyUsage']['extnValue'] AS $usage) {
-      if ($usage == 'digitalSignature') {
-        $digitalSignatureEnabled = TRUE;
+    if (isset($extensions['id-ce-keyUsage']) && isset($extensions['id-ce-keyUsage']['extnValue']) && !empty($extensions['id-ce-keyUsage']['extnValue'])) {
+      foreach ($extensions['id-ce-keyUsage']['extnValue'] AS $usage) {
+        if ($usage == 'digitalSignature') {
+          $digitalSignatureEnabled = TRUE;
+        }
       }
     }
+
     if (!$digitalSignatureEnabled) {
       $message = 'Certificate %cert_location\'s x.509 is not enabled for digital Signatures.';
       $args = [
@@ -405,12 +410,12 @@ class Signer {
     }
 
     // test for basicConstraints
-    $basisConstraints = FALSE;
+    $basicConstraints = FALSE;
     $certificateAuthority = FALSE;
     if (isset($extensions['id-ce-basicConstraints'])) {
-      $basisConstraints = TRUE;
+      $basicConstraints = TRUE;
       // test for Certificate Authority
-      if ($cert_file->decodedCert['tbsCertificate']['extensions'][0]['extnValue']['cA']) {
+      if ($extensions['id-ce-basicConstraints']['extnValue']['cA']) {
         $certificateAuthority = TRUE;
       }
     }
@@ -420,7 +425,7 @@ class Signer {
 
     if (
       (
-        !$basisConstraints || // If the Basic Constraints extension is absent
+        !$basicConstraints || // If the Basic Constraints extension is absent
         !$certificateAuthority // or the certificate authority (CA) Boolean is not asserted
       ) && (
         !isset($extensions['id-ce-extKeyUsage']['extnValue']) ||
