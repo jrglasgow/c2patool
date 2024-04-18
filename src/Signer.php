@@ -347,7 +347,7 @@ class Signer {
       $args = [
         '%cert_location' => $cert_file->uri,
         '%signature_algorithm' => $cert_file->decodedCert['signatureAlgorithm']['algorithm'],
-        '%allowed_signature_algorithms' => print_r(\Jrglasgow\C2paTool\Tool::SIGNATURE_ALGORITHMS, TRUE),
+        '%allowed_signature_algorithms' => print_r(self::SIGNATURE_ALGORITHMS, TRUE),
       ];
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
@@ -487,6 +487,5 @@ class Signer {
     $algo = $signatureAlgorithms[$certAlgorithm];
     return $algo ?? FALSE;
   }
-
 
 }
