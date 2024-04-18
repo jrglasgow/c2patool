@@ -290,6 +290,7 @@ class Signer {
     $x509 = new X509();
     $cert_file->uri = $cert_path;
     $cert_file->key_uri = $key_path;
+    $cert_file->invalid_reasons = [];
     $cert_contents = '';
     switch ($cert_path) {
       case 'ENVIRONMENT_VARIABLE':
@@ -299,23 +300,24 @@ class Signer {
       default:
         $cert_contents = file_get_contents($cert_path);
         if (empty($key_path) || !file_exists($key_path)) {
+          // though there is no key file for this certificate, hold off throwing
+          // any errors until we check everything else, just set the message
           $message = 'Certificate %cert_location is not valid, corresponding key file %key_path does not exist.';
           $args = [
             '%cert_location' => $cert_file->uri,
             '%key_path' => $key_path,
           ];
-          //throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
-          $key_contents = NULL;
+          $cert_file->invalid_reasons[] = 'MISSING_KEY_FILE';
         }
-        else {
-          $key_contents = file_get_contents($key_path);
-        }
+
+        $key_contents = file_get_contents($key_path);
     }
     if (empty($cert_contents)) {
       $message = 'Certificate %cert_location is not valid, file is empty.';
       $args = [
         '%cert_location' => $cert_file->uri,
       ];
+      $cert_file->invalid_reasons[] = 'EMPTY_CERT_FILE';
       throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
     }
 
@@ -329,6 +331,7 @@ class Signer {
         '%cert_location' => $cert_file->uri,
         '%expire' => $cert_file->decodedCert['tbsCertificate']['validity']['notAfter']['utcTime'],
       ];
+      $cert_file->invalid_reasons[] = 'CERT_EXPIRED';
       throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
     }
     else if ($request_time < strtotime($cert_file->decodedCert['tbsCertificate']['validity']['notBefore']['utcTime'])) {
@@ -337,6 +340,7 @@ class Signer {
         '%cert_location' => $cert_file->uri,
         '%begins_valid' => $cert_file->decodedCert['tbsCertificate']['validity']['notBefore']['utcTime'],
       ];
+      $cert_file->invalid_reasons[] = 'CERT_NOT_YET_VALID';
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
@@ -349,7 +353,8 @@ class Signer {
         '%signature_algorithm' => $cert_file->decodedCert['signatureAlgorithm']['algorithm'],
         '%allowed_signature_algorithms' => print_r(self::SIGNATURE_ALGORITHMS, TRUE),
       ];
-      throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
+      $cert_file->invalid_reasons[] = 'CERT_SIGNATURE_NOT_COMPATIBLE';
+      throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
     }
 
     // Follow the Public Key Infrastructure (PKI) X.509 V3 specification.
@@ -361,6 +366,7 @@ class Signer {
         '%cert_location' => $cert_file->uri,
         '%version' => $cert_file->decodedCert['tbsCertificate']['version'],
       ];
+      $cert_file->invalid_reasons[] = 'CERT_NOT_X509_V3';
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
@@ -378,19 +384,17 @@ class Signer {
 
     // Asserts the DigitalSignature Bit
     $digitalSignatureEnabled = FALSE;
-    if (isset($extensions['id-ce-keyUsage']) && isset($extensions['id-ce-keyUsage']['extnValue']) && !empty($extensions['id-ce-keyUsage']['extnValue'])) {
-      foreach ($extensions['id-ce-keyUsage']['extnValue'] AS $usage) {
-        if ($usage == 'digitalSignature') {
-          $digitalSignatureEnabled = TRUE;
-        }
+    foreach ($extensions['id-ce-keyUsage']['extnValue'] AS $usage) {
+      if ($usage == 'digitalSignature') {
+        $digitalSignatureEnabled = TRUE;
       }
     }
-
     if (!$digitalSignatureEnabled) {
       $message = 'Certificate %cert_location\'s x.509 is not enabled for digital Signatures.';
       $args = [
         '%cert_location' => $cert_file->uri,
       ];
+      $cert_file->invalid_reasons[] = 'CERT_DIGITAL_SIGNATURE_NOT_ENABLED';
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
@@ -410,12 +414,12 @@ class Signer {
     }
 
     // test for basicConstraints
-    $basicConstraints = FALSE;
+    $basisConstraints = FALSE;
     $certificateAuthority = FALSE;
     if (isset($extensions['id-ce-basicConstraints'])) {
-      $basicConstraints = TRUE;
+      $basisConstraints = TRUE;
       // test for Certificate Authority
-      if ($extensions['id-ce-basicConstraints']['extnValue']['cA']) {
+      if ($cert_file->decodedCert['tbsCertificate']['extensions'][0]['extnValue']['cA']) {
         $certificateAuthority = TRUE;
       }
     }
@@ -425,7 +429,7 @@ class Signer {
 
     if (
       (
-        !$basicConstraints || // If the Basic Constraints extension is absent
+        !$basisConstraints || // If the Basic Constraints extension is absent
         !$certificateAuthority // or the certificate authority (CA) Boolean is not asserted
       ) && (
         !isset($extensions['id-ce-extKeyUsage']['extnValue']) ||
@@ -439,6 +443,7 @@ class Signer {
         '%certificateAuthority' => $certificateAuthority ? 'TRUE' : 'FALSE',
         '%ekuCount' => count($extensions['id-ce-extKeyUsage']['extnValue']),
       ];
+      $cert_file->invalid_reasons[] = 'CERT_BASIC_CONSTRAINTS_INVALID';
       throw new CertificateValidationException(strtr($message,$args), 0, NULL, $message, $args);
     }
 
@@ -447,11 +452,14 @@ class Signer {
 
 
     if (empty($key_contents)) {
-      $message = 'Certificate %cert_location is not valid, corresponding key file %key_path is empty.';
-      $args = [
-        '%cert_location' => $cert_file->uri,
-        '%key_path' => $key_path,
-      ];
+      if (!isset($message)) {
+        $message = 'Certificate %cert_location is not valid, corresponding key file %key_path is empty.';
+        $args = [
+          '%cert_location' => $cert_file->uri,
+          '%key_path' => $key_path,
+        ];
+      }
+      $cert_file->invalid_reasons[] = 'KEY_FILE_EMPTY';
       throw new CertificateValidationException(strtr($message, $args), 0, NULL, $message, $args);
     }
     // Validate that the key will work to sign data for the certificate
@@ -475,6 +483,7 @@ class Signer {
         '%cert_location' => $cert_file->uri,
         '%key_location' => $cert_file->key_uri,
       ];
+      $cert_file->invalid_reasons[] = 'COULD_NOT_VALIDATE_SIGNATURE';
       throw new CertificateValidationException(strtr($message, $args),0,NULL, $message, $args);
     }
 
