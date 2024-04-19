@@ -81,6 +81,7 @@ class Signer {
     'sha384WithRSAEncryption' => 'PS384',
     'sha512WithRSAEncryption' => 'PS512',
     'prime256v1' => 'ES256',
+    'secp256r1' => 'ES256',
     'secp384r1' => 'ES384',
     'secp521r1' => 'ES512',
     'id-Ed25519' => 'Ed25519',
@@ -113,18 +114,40 @@ class Signer {
   protected \stdClass $certDetails;
 
   /**
+   * Path to an executable that will sign the claim bytes
+   *
+   * @var string
+   */
+  protected string $remoteSignerPath = '';
+
+  /**
+   * how much space to reserve in the manifest for the signature
+   */
+  protected int $reserveSize = 20458;
+
+  /**
+   * if the signature should be verified
+   *
+   * @var bool
+   */
+  protected $noSigningVerify = FALSE;
+
+  /**
    * @param \Jrglasgow\C2paTool\Tool $tool
    * @param string $cert_file_path
    * @param string $key_file_path
    *
    * @throws \Jrglasgow\C2paTool\Exceptions\CertificateValidationException
    */
-  public function __construct(Tool $tool, string $cert_file_path, string $key_file_path) {
+  public function __construct(Tool $tool, string $cert_file_path, string $key_file_path, \stdClass $certDetails = NULL) {
     $this->tool = $tool;
 
-    // validate that the cetificate matches the requirements
-    $certDetails = new \stdClass();
-    self::validateCert($cert_file_path, $key_file_path, $certDetails);
+
+    if (empty($certDetails)) {
+      // validate that the certificate matches the requirements
+      $certDetails = new \stdClass();
+      self::validateCert($cert_file_path, $key_file_path, $certDetails);
+    }
     // if the certificate is not valid an exception will be thrown and this will
     // not execute
 
@@ -150,6 +173,19 @@ class Signer {
       '--config', // the manifest is being provided on the command line
       '\'' . (string) $this->adjustManifest($manifest) . '\'',
     ];
+
+    if (!empty($this->remoteSignerPath) && file_exists($this->remoteSignerPath) && is_executable($this->remoteSignerPath)) {
+      // add the remote signer
+      $command_args[] = '--signer-path';
+      $command_args[] = $this->remoteSignerPath;
+      // add the reserve-size
+      $command_args[] = '--reserve-size';
+      $command_args[] = $this->reserveSize;
+
+      if ($this->noSigningVerify) {
+        $command_args[] = '--no_signing_verify';
+      }
+    }
 
     if ($source_file == $destination_file) {
       // we are overwriting the source
@@ -201,7 +237,7 @@ class Signer {
     }
 
     // set the certificate
-    if ($this->certFilePath == 'ENVIRONMENT_VARIABLE'){
+    if ($this->certFilePath == 'ENVIRONMENT_VARIABLE') {
       // make sure there is no key file in the manifest if we have environment variables set
       if (isset($manifest->sign_cert)) {
         unset($manifest->sign_cert);
@@ -258,6 +294,18 @@ class Signer {
    * @return mixed
    */
   protected function getSignatureAlgorithm() {
+    $publicKeyInfo = $this->certDetails->decodedCert['tbsCertificate']['subjectPublicKeyInfo'];
+    $algorithm = NULL;
+    if (isset($publicKeyInfo['algorithm']) && isset($publicKeyInfo['algorithm']['algorithm']) && !empty($publicKeyInfo['algorithm']['algorithm'])) {
+      $algorithm = $publicKeyInfo['algorithm']['algorithm'];
+    }
+    switch ($algorithm) {
+      case 'id-ecPublicKey':
+        if (isset($publicKeyInfo['algorithm']['parameters']['objectIdentifier'])) {
+          return $publicKeyInfo['algorithm']['parameters']['objectIdentifier'];
+        }
+        break;
+    }
     return $this->certDetails->decodedCert['signatureAlgorithm']['algorithm'];
   }
 
@@ -497,6 +545,90 @@ class Signer {
     $certAlgorithm = $cert_file->decodedCert['signatureAlgorithm']['algorithm'];
     $algo = $signatureAlgorithms[$certAlgorithm];
     return $algo ?? FALSE;
+  }
+
+  /**
+   * getter
+   *
+   * @return string
+   */
+  public function getRemoteSignerPath() {
+    return $this->remoteSignerPath;
+  }
+
+  /**
+   * setter
+   *
+   * @param string $path
+   *
+   * @return void
+   */
+  public function setRemoteSignerPath(string $path) {
+    $this->remoteSignerPath = $path;
+  }
+
+  /**
+   * getter
+   *
+   * @return int
+   */
+  public function getReserveSize() {
+    return $this->reserveSize;
+  }
+
+  /**
+   * setter
+   *
+   * @param int $reserveSize
+   *
+   * @return void
+   */
+  public function setReseveSize(int $reserveSize) {
+    $this->reserveSize = $reserveSize;
+  }
+
+  /**
+   * getter
+   *
+   * @return bool
+   */
+  public function getNoSigningVerioy() {
+    return $this->noSigningVerify;
+  }
+
+  /**
+   * setter
+   *
+   * @param bool $setting
+   *
+   * @return void
+   */
+  public function setNoSigningVerigy(bool $setting) {
+    $this->noSigningVerify = $setting;
+  }
+
+  public function getCertFilePath() {
+    return $this->certFilePath;
+  }
+
+  public function setCertFilePath(string $path) {
+    $this->certFilePath = $path;
+  }
+
+  public function getKeyFilePath() {
+    return $this->keyFilePath;
+  }
+
+  public function setKeyFilePath(string $path) {
+    $this->keyFilePath = $path;
+  }
+
+  public function getCertDetails() {
+    return $this->certDetails;
+  }
+
+  public function setCertDetails(\stdClass $certDetails) {
+    $this->certDetails = $certDetails;
   }
 
 }
