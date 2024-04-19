@@ -309,8 +309,10 @@ class Signer {
           ];
           $cert_file->invalid_reasons[] = 'MISSING_KEY_FILE';
         }
+        else {
+          $key_contents = file_get_contents($key_path);
+        }
 
-        $key_contents = file_get_contents($key_path);
     }
     if (empty($cert_contents)) {
       $message = 'Certificate %cert_location is not valid, file is empty.';
