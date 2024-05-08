@@ -59,10 +59,10 @@ class Tool implements LoggerAwareInterface {
       if (file_exists($file_path) && is_executable($file_path)) {
         $this->binary = $file_path;
         $this->setBinaryVersion();
-        if ($this->getBinaryVersion()) {
+        if ($executable_path = $this->getBinaryVersion()) {
           // a version was returned... since it is the first item in the $PATH
           // we will stop looking
-          return $this->getBinaryVersion();
+          return $executable_path;
         }
       }
     }
