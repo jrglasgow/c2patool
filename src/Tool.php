@@ -27,9 +27,60 @@ class Tool implements LoggerAwareInterface {
    */
   protected string $binaryVersion;
 
+  /**
+   * Environment variables to be passed to c2patool executable
+   *
+   * @var array
+   */
+  protected array $environment = [];
+
+  /**
+   * If set to TRUE the environment for c2patool will be limited to
+   * $this->environment
+   * If set to FALSE (default) any environment variables in $this->environment
+   * will be added to the current environment variables, if there is an
+   * environment variable with the same name it will overwrite the current var.
+   *
+   * @var bool
+   */
+  protected bool $overwriteEnvironment = FALSE;
+
   public function __construct(LoggerInterface $logger) {
     $this->setLogger($logger);
     $this->searchBinary();
+  }
+
+  /**
+   * Set and/or get the overwriteEnvironment setting.
+   *
+   * @param $setting
+   *
+   * @return bool
+   */
+  public function overwriteEnvironment($setting = NULL) {
+    if (!empty($setting)) {
+      $this->overwriteEnvironment = (bool) $setting;
+    }
+    return $this->overwriteEnvironment;
+  }
+
+  /**
+   * Set the environment variables to use in the process.
+   *
+   * @return void
+   */
+  public function setEnvironment(array $env) {
+    $this->environment = $env;
+  }
+
+
+  /**
+   * Get the environment variables
+   *
+   * @return array
+   */
+  public function getEnvironment() {
+    return $this->environment;
   }
 
   /**
@@ -59,10 +110,10 @@ class Tool implements LoggerAwareInterface {
       if (file_exists($file_path) && is_executable($file_path)) {
         $this->binary = $file_path;
         $this->setBinaryVersion();
-        if ($executable_path = $this->getBinaryVersion()) {
+        if ($this->getBinaryVersion()) {
           // a version was returned... since it is the first item in the $PATH
           // we will stop looking
-          return $executable_path;
+          return $this->getBinaryVersion();
         }
       }
     }
@@ -84,8 +135,8 @@ class Tool implements LoggerAwareInterface {
     }
     $old_binary = $this->binary;
     $this->binary = $file_path;
-    if ($this->setBinaryVersion()) {
-      return $this->setBinaryVersion();
+    if ($executable_path = $this->setBinaryVersion()) {
+      return $executable_path;
     }
     $this->binary = $old_binary;
     return FALSE;
@@ -125,6 +176,31 @@ class Tool implements LoggerAwareInterface {
   }
 
   /**
+   * Create the Process object from the command and modify the environment
+   * variables, if needed.
+   *
+   * @param $command
+   *
+   * @return \Symfony\Component\Process\Process
+   */
+  protected function createProcess($command) {
+    $process = Process::fromShellCommandline($command);
+    if ($this->overwriteEnvironment) {
+      // replace the current environment variables with the set ones, even if it
+      // is empty
+      $env = $this->environment;
+    }
+    else {
+      // addd the new environment variables to the current ones
+      $env = getenv();
+      $env = array_merge($env, $this->environment);
+    }
+    $process->setEnv($env);
+
+    return $process;
+  }
+
+  /**
    * Executes a command with the binary executable.
    *
    * @param $command
@@ -138,16 +214,19 @@ class Tool implements LoggerAwareInterface {
     // test to make sure the binary exists and is executable
     $command = $this->binary . ' ' . $command;
     if (isset($this->binary) && file_exists($this->binary) && is_executable($this->binary)) {
-      $process = Process::fromShellCommandline($command);
+      $process = $this->createProcess($command);
       $process->setTimeout($timeout);
       $this->logger->info(sprintf('C2paTool\Tool executes command %s', $process->getCommandLine()));
-      $process->run();
+      $process->run(NULL, ['TEST_ENV'=>'this is only a test - still']);
 
       if ( ! $process->isSuccessful()) {
         throw new RuntimeException(sprintf('Command %s failed : %s, exitcode %s', $command, $process->getErrorOutput(), $process->getExitCode()));
       }
 
       $output = $process->getOutput();
+      $errors = $process->getErrorOutput();
+      $exit_code = $process->getExitCode();
+      $exit_code_text = $process->getExitCodeText();
 
       unset($process);
 
