@@ -28,22 +28,14 @@ class Tool implements LoggerAwareInterface {
   protected string $binaryVersion;
 
   /**
-   * Environment variables to be passed to c2patool executable
+   * Environment variables to be passed to c2patool executable, if you wish to
+   * remove an environment variable set it in the array with a FALSE value
+   *
+   * @see https://symfony.com/doc/current/components/process.html#setting-environment-variables-for-processes
    *
    * @var array
    */
   protected array $environment = [];
-
-  /**
-   * If set to TRUE the environment for c2patool will be limited to
-   * $this->environment
-   * If set to FALSE (default) any environment variables in $this->environment
-   * will be added to the current environment variables, if there is an
-   * environment variable with the same name it will overwrite the current var.
-   *
-   * @var bool
-   */
-  protected bool $overwriteEnvironment = FALSE;
 
   public function __construct(LoggerInterface $logger) {
     $this->setLogger($logger);
@@ -184,18 +176,7 @@ class Tool implements LoggerAwareInterface {
    * @return \Symfony\Component\Process\Process
    */
   protected function createProcess($command) {
-    $process = Process::fromShellCommandline($command);
-    if ($this->overwriteEnvironment) {
-      // replace the current environment variables with the set ones, even if it
-      // is empty
-      $env = $this->environment;
-    }
-    else {
-      // addd the new environment variables to the current ones
-      $env = getenv();
-      $env = array_merge($env, $this->environment);
-    }
-    $process->setEnv($env);
+    $process = Process::fromShellCommandline($command, null, $this->environment);
 
     return $process;
   }
@@ -220,7 +201,7 @@ class Tool implements LoggerAwareInterface {
       $process->run(NULL, ['TEST_ENV'=>'this is only a test - still']);
 
       if ( ! $process->isSuccessful()) {
-        throw new RuntimeException(sprintf('Command %s failed : %s, exitcode %s', $command, $process->getErrorOutput(), $process->getExitCode()));
+        throw new RuntimeException(sprintf('Command failed: %s, exitcode %s - ', $process->getErrorOutput(), $process->getExitCode(), $command));
       }
 
       $output = $process->getOutput();
