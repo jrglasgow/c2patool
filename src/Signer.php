@@ -3,6 +3,7 @@
 namespace Jrglasgow\C2paTool;
 
 use Jrglasgow\C2paTool\Exceptions\CertificateValidationException;
+use phpseclib3\Crypt\EC\Formats\Keys\Common as CommonKeys;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\File\X509;
 use stdClass;
@@ -11,7 +12,7 @@ use stdClass;
  * Will sign and embed a manifest.
  */
 class Signer {
-
+  use CommonKeys;
   /**
    * list of supported mime types - since there isn't a one-to-one, or a
    * one-to-many relationship between SUPPORT_MIME_TYPES and
@@ -132,6 +133,8 @@ class Signer {
    */
   protected $noSigningVerify = FALSE;
 
+  protected $cannotSign = FALSE;
+
   /**
    * @param \Jrglasgow\C2paTool\Tool $tool
    * @param string $cert_file_path
@@ -168,6 +171,9 @@ class Signer {
    * @return true
    */
   public function sign(string $source_file, string $destination_file, string|array $manifest, string $parent_file = ''): bool {
+    if ($this->cannotSign) {
+      return $this->cannotSign;
+    }
     $command_args = [
       $source_file,// the file we are signing
       '--config', // the manifest is being provided on the command line
@@ -224,6 +230,11 @@ class Signer {
 
     // set the signature algorithm
     $manifest->alg = $this->recommendedSignatureType();
+    if (empty($manifest->alg)) {
+      // we don't have an appropriate signature algorithm, there is no point
+      // continuing, we might as well fail.
+      $this->cannotSign = 'Cannot sign manifest, could not find recommended algorithm for ' . $this->getSignatureAlgorithm();
+    }
 
     // set the private key
     if ($this->keyFilePath == 'ENVIRONMENT_VARIABLE') {
@@ -316,9 +327,18 @@ class Signer {
    * @return string
    */
   protected function recommendedSignatureType() {
+    self::initialize_static_variables();
     $algorithm = $this->getSignatureAlgorithm();
     $signatureAlgorithms = self::SIGNATURE_ALGORITHMS;
-    return strtolower($signatureAlgorithms[$algorithm]);
+    if (isset($signatureAlgorithms[$algorithm])) {
+      // the algorithm matches, return the recommended Signature Type
+      return strtolower($signatureAlgorithms[$algorithm]);
+    }
+    else if ($algorithm = array_search($algorithm, self::$curveOIDs)) {
+      // the algorithm didn't match, it could be an OID, check against that list
+      return strtolower($signatureAlgorithms[$algorithm]) ?? FALSE;
+    }
+    return FALSE;
   }
 
   /**
