@@ -210,6 +210,15 @@ class Signer {
   }
 
   /**
+   * Get the tool object.
+   *
+   * @return \Jrglasgow\C2paTool\Tool
+   */
+  public function getTool() {
+    return $this->tool;
+  }
+
+  /**
    * Make sure the keys, signature algorithm, are set according to the
    * configuration of the Signer. Convert the manifest to a JSON string.
    *

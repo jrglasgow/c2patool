@@ -227,4 +227,13 @@ class Tool implements LoggerAwareInterface {
     return $default;
   }
 
+
+  public function checkManifest($sourceFile) {
+    if (!file_exists($sourceFile)) {
+      return FALSE;
+    }
+    $result = $this->executeCommand($sourceFile);
+    return json_decode($result);
+  }
+
 }
