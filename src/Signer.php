@@ -288,7 +288,7 @@ class Signer {
    * @return bool
    */
   public static function mimeTypeAllowed(mixed $mime_type) {
-    if (array_search($mime_type, self::SUPPORT_MIME_TYPES)) {
+    if (array_search(strtolower($mime_type), self::SUPPORT_MIME_TYPES)) {
       return TRUE;
     }
     return FALSE;
@@ -302,7 +302,7 @@ class Signer {
    * @return bool
    */
   public static function fileExtensionAllowed(mixed $extension) {
-    if (array_search($extension, self::SUPPORT_FILE_EXTENSIONS)) {
+    if (array_search(strtolower($extension), self::SUPPORT_FILE_EXTENSIONS)) {
       return TRUE;
     }
     return FALSE;
