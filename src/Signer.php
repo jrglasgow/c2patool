@@ -28,6 +28,7 @@ class Signer {
     'image/heic',
     'image/heif',
     'image/jpeg',
+    'image/jpg',
     'audio/mp4',
     'audio/mpeg',
     'video/mp4',
