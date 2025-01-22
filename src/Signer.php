@@ -194,9 +194,21 @@ class Signer {
       }
     }
 
+    $replace_original = FALSE;
     if ($source_file == $destination_file) {
+      $replace_original = TRUE;
       // we are overwriting the source
-      $command_args[] = '-f';
+      // $command_args[] = '-f';
+
+      // There is a problem with c2patool not working with the -f or --force flag
+      // in >9.9.12
+      // instead we will change the name of the destination file by adding the
+      // microtime to the destination file name
+      $destination_file_modifier = \microtime(TRUE);
+      $path_info = \pathinfo($destination_file);
+      $original_destination = $destination_file;
+      $temp_destination = $path_info['dirname'] . '/' . $path_info['filename'] . '-temp-' . $destination_file_modifier . '.' . $path_info['extension'];
+      $destination_file = $temp_destination;
     }
 
     if (!empty($parent_file) && file_exists($parent_file)) {
@@ -207,7 +219,13 @@ class Signer {
     $command_args[] = '-o ';
     $command_args[] = $destination_file;
     $command = implode(' ', $command_args);
-    return $this->tool->executeCommand($command, 60);
+    $result = $this->tool->executeCommand($command, 60);
+    if ($result && $replace_original) {
+      // since replacing the original was requested copy the new destination file
+      // over the original file
+      rename($destination_file, $source_file);
+    }
+    return $result;
   }
 
   /**
