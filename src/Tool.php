@@ -227,12 +227,25 @@ class Tool implements LoggerAwareInterface {
     return $default;
   }
 
-
+  /**
+   * Get any currently existing manifest
+   *
+   * @param $sourceFile
+   *
+   * @return false|mixed
+   */
   public function checkManifest($sourceFile) {
     if (!file_exists($sourceFile)) {
       return FALSE;
     }
-    $result = $this->executeCommand($sourceFile);
+    try {
+      $result = $this->executeCommand($sourceFile);
+    }
+    catch (RuntimeException $e) {
+      $this->logger->debug($e->getMessage() . ': ' . $sourceFile);
+      return FALSE;
+    }
+
     return json_decode($result);
   }
 
