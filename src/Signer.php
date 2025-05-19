@@ -175,10 +175,19 @@ class Signer {
     if ($this->cannotSign) {
       return $this->cannotSign;
     }
+
+    $manifest_string = (string) $this->adjustManifest($manifest);
+
+    // save the manifest is a temp file
+    $manifest_file_path = tempnam(sys_get_temp_dir(), 'c2patool-manifest-' . basename($source_file));
+    file_put_contents($manifest_file_path, $manifest_string);
+
+
+
     $command_args = [
       $source_file,// the file we are signing
-      '--config', // the manifest is being provided on the command line
-      '\'' . (string) $this->adjustManifest($manifest) . '\'',
+      '--manifest', // the manifest is being provided on the command line
+      $manifest_file_path,
     ];
 
     if (!empty($this->remoteSignerPath) && file_exists($this->remoteSignerPath) && is_executable($this->remoteSignerPath)) {
@@ -225,6 +234,8 @@ class Signer {
       // over the original file
       rename($destination_file, $source_file);
     }
+    // remove the temp manifest file
+    unlink($manifest_file_path);
     return $result;
   }
 
