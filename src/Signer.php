@@ -528,7 +528,7 @@ class Signer {
     if (isset($extensions['id-ce-basicConstraints'])) {
       $basisConstraints = TRUE;
       // test for Certificate Authority
-      if ($cert_file->decodedCert['tbsCertificate']['extensions'][0]['extnValue']['cA']) {
+      if ($extensions['id-ce-basicConstraints']['extnValue']['cA']) {
         $certificateAuthority = TRUE;
       }
     }
