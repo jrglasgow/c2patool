@@ -49,7 +49,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return bool
    */
-  public function overwriteEnvironment($setting = NULL) {
+  public function overwriteEnvironment($setting = NULL): bool {
     if (!empty($setting)) {
       $this->overwriteEnvironment = (bool) $setting;
     }
@@ -61,7 +61,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return void
    */
-  public function setEnvironment(array $env) {
+  public function setEnvironment(array $env): void {
     $this->environment = $env;
   }
 
@@ -71,7 +71,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return array
    */
-  public function getEnvironment() {
+  public function getEnvironment(): array {
     return $this->environment;
   }
 
@@ -91,7 +91,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return false|string
    */
-  protected function searchBinary() {
+  protected function searchBinary(): bool|string {
     // load th path
     $path = getenv('PATH');
     $search_paths = explode(':', $path);
@@ -139,7 +139,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return false|string
    */
-  public function getBinary() {
+  public function getBinary(): bool|string {
     return $this->binary;
   }
 
@@ -148,7 +148,7 @@ class Tool implements LoggerAwareInterface {
    *
    * @return mixed
    */
-  public function getBinaryVersion() {
+  public function getBinaryVersion(): mixed {
     return $this->binaryVersion;
   }
 
@@ -159,9 +159,9 @@ class Tool implements LoggerAwareInterface {
    * @return false|string Returns the binary version or FALSE is it cannot be
    * found.
    */
-  private function setBinaryVersion() {
+  private function setBinaryVersion(): bool|string {
     $timeout = 60;
-    $output = $this->executeCommand('--version', 30, 'NOT FOUND');
+    $output = $this->executeCommand(['--version'], 30, 'NOT FOUND');
     $version = trim(str_replace('c2patool', '', $output));
     $this->binaryVersion = $version;
     return $output ?? FALSE;
@@ -175,8 +175,17 @@ class Tool implements LoggerAwareInterface {
    *
    * @return \Symfony\Component\Process\Process
    */
-  protected function createProcess($command) {
-    $process = Process::fromShellCommandline($command, null, $this->environment);
+  protected function createProcess($command): Process {
+    if (is_array($command)) {
+      // the best option is to have the command as arguments so Process can auto
+      // escape it
+      $process = new Process($command);
+    }
+    else {
+      // a string needs to be interpreted as an already formed command which has
+      // already been escaped
+      $process = Process::fromShellCommandline($command, null, $this->environment);
+    }
 
     return $process;
   }
@@ -193,10 +202,21 @@ class Tool implements LoggerAwareInterface {
    */
   public function executeCommand($command, $timeout = 60, $default = 'COULD NOT EXECUTE'): string {
     // test to make sure the binary exists and is executable
-    $command = $this->binary . ' ' . $command;
+    if (is_string($command)) {
+      trigger_error(
+        'Passing $command as a string is deprecated, user an array of arguments',
+        E_USER_DEPRECATED
+      );
+      $command = $this->binary . ' ' . $command;
+    }
+    else if (is_array($command)) {
+      array_unshift($command, $this->binary);
+    }
     if (isset($this->binary) && file_exists($this->binary) && is_executable($this->binary)) {
       $process = $this->createProcess($command);
       $process->setTimeout($timeout);
+      $commandline = $process->getCommandLine();
+      error_log($commandline);
       $this->logger->info(sprintf('C2paTool\Tool executes command %s', $process->getCommandLine()));
       $process->run(NULL, ['TEST_ENV'=>'this is only a test - still']);
 

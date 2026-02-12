@@ -225,10 +225,9 @@ class Signer {
       $command_args[] = $parent_file;
     }
 
-    $command_args[] = '-o ';
+    $command_args[] = '-o';
     $command_args[] = $destination_file;
-    $command = implode(' ', $command_args);
-    $result = $this->tool->executeCommand($command, 60);
+    $result = $this->tool->executeCommand($command_args, 60);
     if ($result && $replace_original) {
       // since replacing the original was requested copy the new destination file
       // over the original file
