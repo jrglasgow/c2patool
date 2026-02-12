@@ -251,10 +251,11 @@ class Tool implements LoggerAwareInterface {
    * Get any currently existing manifest
    *
    * @param $sourceFile
+   * @paran $associative force to return an associative array
    *
    * @return false|mixed
    */
-  public function checkManifest($sourceFile) {
+  public function checkManifest($sourceFile, $associative = NULL) {
     if (!file_exists($sourceFile)) {
       return FALSE;
     }
@@ -266,7 +267,7 @@ class Tool implements LoggerAwareInterface {
       return FALSE;
     }
 
-    return json_decode($result);
+    return json_decode($result, $associative);
   }
 
 }
