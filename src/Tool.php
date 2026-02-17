@@ -2,10 +2,10 @@
 
 namespace Jrglasgow\C2paTool;
 
+use Jrglasgow\C2paTool\Exceptions\RuntimeException;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
-use Jrglasgow\C2paTool\Exceptions\RuntimeException;
 
 class Tool implements LoggerAwareInterface {
 
@@ -251,11 +251,12 @@ class Tool implements LoggerAwareInterface {
    * Get any currently existing manifest
    *
    * @param $sourceFile
-   * @paran $associative force to return an associative array
-   *
+   * @param null $associative force to return an associative array
+ *
    * @return false|mixed
+   *
    */
-  public function checkManifest($sourceFile, $associative = NULL) {
+  public function checkManifest($sourceFile, $associative = NULL): mixed {
     if (!file_exists($sourceFile)) {
       return FALSE;
     }
