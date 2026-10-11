@@ -178,8 +178,13 @@ class Signer {
 
     $manifest_string = (string) $this->adjustManifest($manifest);
 
-    // save the manifest is a temp file
-    $manifest_file_path = tempnam(sys_get_temp_dir(), 'c2patool-manifest-' . basename($source_file));
+    // Save the manifest in a folder of its own. c2patool 0.10 and later only
+    // load resources, such as the claim generator icon, from the folder of the
+    // manifest, so the icons are copied next to it.
+    $manifest_dir = sys_get_temp_dir() . '/c2patool-manifest-' . bin2hex(random_bytes(8));
+    mkdir($manifest_dir, 0700);
+    $manifest_string = $this->copyResources($manifest_string, $manifest_dir);
+    $manifest_file_path = $manifest_dir . '/manifest.json';
     file_put_contents($manifest_file_path, $manifest_string);
 
 
@@ -227,15 +232,48 @@ class Signer {
 
     $command_args[] = '-o';
     $command_args[] = $destination_file;
-    $result = $this->tool->executeCommand($command_args, 60);
+    try {
+      $result = $this->tool->executeCommand($command_args, 60);
+    }
+    finally {
+      // Remove the temporary manifest folder, also when c2patool fails.
+      array_map('unlink', glob($manifest_dir . '/*'));
+      rmdir($manifest_dir);
+    }
     if ($result && $replace_original) {
       // since replacing the original was requested copy the new destination file
       // over the original file
       rename($destination_file, $source_file);
     }
-    // remove the temp manifest file
-    unlink($manifest_file_path);
     return $result;
+  }
+
+  /**
+   * Copies the claim generator icons into the manifest folder.
+   *
+   * @param string $manifest_string
+   *   The manifest as JSON.
+   * @param string $manifest_dir
+   *   The folder the manifest is saved in.
+   *
+   * @return string
+   *   The manifest as JSON, with each copied icon pointing to its copy.
+   */
+  protected function copyResources(string $manifest_string, string $manifest_dir): string {
+    $manifest = json_decode($manifest_string);
+    if (empty($manifest->claim_generator_info) || !is_array($manifest->claim_generator_info)) {
+      return $manifest_string;
+    }
+    foreach ($manifest->claim_generator_info as $delta => $info) {
+      $identifier = $info->icon->identifier ?? '';
+      if ($identifier === '' || !is_file($identifier)) {
+        continue;
+      }
+      $name = 'icon-' . $delta . '-' . basename($identifier);
+      copy($identifier, $manifest_dir . '/' . $name);
+      $info->icon->identifier = $name;
+    }
+    return json_encode($manifest);
   }
 
   /**
